@@ -7,6 +7,9 @@
 constexpr int arena_size = 1024;
 template <typename T>
 using stack_value = tcb::allocated_value<T, hh::short_alloc<T, arena_size>>;
+
+static_assert(!std::is_default_constructible<stack_value<int>>::value, "");
+
 using arena_t = hh::arena<arena_size>;
 
 TEST_CASE("short_alloc construction", "[short-alloc]")
