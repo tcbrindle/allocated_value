@@ -3,7 +3,6 @@
 #define TCB_ALLOCATED_HPP_INCLUDED
 
 #include <memory>
-#include <tuple>
 #include <type_traits>
 
 namespace tcb {
@@ -25,7 +24,7 @@ namespace tcb {
 #endif
 
 template <typename T, typename A>
-struct allocated_value;
+class allocated_value;
 
 template <typename T>
 struct is_allocated_value : std::false_type {};
@@ -42,10 +41,25 @@ struct in_place_t { explicit in_place_t() = default; };
 
 constexpr in_place_t in_place{};
 
+namespace detail {
+
+template <typename T>
+struct ebo_store : private T {
+    ebo_store() = default;
+    ebo_store(const T& t) : T(t) {}
+    ebo_store(T&& t) : T{std::move(t)} {}
+
+    T& get_ebo_value() { return *this; }
+    const T& get_ebo_value() const { return *this; }
+};
+
+}
+
 template <typename T, typename Alloc = std::allocator<T>>
-struct allocated_value {
-private:
+class allocated_value : private detail::ebo_store<Alloc> {
+
     using traits = std::allocator_traits<Alloc>;
+    using ebo_base = detail::ebo_store<Alloc>;
 
     using is_pocca_t = typename traits::propagate_on_container_copy_assignment;
     using is_pocma_t = typename traits::propagate_on_container_move_assignment;
@@ -73,28 +87,6 @@ public:
         "Use allocated_value<std::reference_wrapper<T>>."
     );
 
-    /*
-    template <typename... Args,
-              typename = enable_if_constructible_t<Args...>>
-    allocated_value(Args&&... args)
-        : allocated_value(std::allocator_arg, allocator_type{}, std::forward<Args>(args)...)
-    {}
-
-    template <typename... Args,
-              typename = enable_if_constructible_t<Args...>>
-    allocated_value(std::allocator_arg_t, allocator_type allocator, Args&&... args)
-        : storage_(allocator, nullptr)
-    {
-        auto a = get_allocator();
-        ptr() = traits::allocate(a, 1);
-        TRY {
-            traits::construct(a, ptr(), std::forward<Args>(args)...);
-        } CATCH (...) {
-            traits::deallocate(a, ptr(), 1);
-            THROW;
-        }
-    }*/
-
     /**
      * Default constructor.
      *
@@ -108,7 +100,6 @@ public:
                       std::is_default_constructible<V>::value &&
                       std::is_default_constructible<A>::value>::type>
     explicit allocated_value()
-        : storage_(allocator_type{}, nullptr)
     {
         do_construct();
     }
@@ -125,7 +116,7 @@ public:
               typename = typename std::enable_if<
                     std::is_default_constructible<V>::value>::type>
     explicit allocated_value(const allocator_type& allocator)
-        : storage_(allocator, nullptr)
+        : ebo_base{allocator}
     {
         do_construct();
     }
@@ -141,7 +132,6 @@ public:
               typename = typename std::enable_if<
                     std::is_default_constructible<A>::value>::type>
     explicit allocated_value(const value_type& value)
-        : storage_(allocator_type{}, nullptr)
     {
         do_construct(value);
     }
@@ -157,7 +147,6 @@ public:
               typename = typename std::enable_if<
                     std::is_default_constructible<A>::value>::type>
     explicit allocated_value(value_type&& value)
-        : storage_(allocator_type{}, nullptr)
     {
         do_construct(std::move(value));
     }
@@ -169,7 +158,7 @@ public:
      * supplied allocator.
      */
     allocated_value(const value_type& value, const allocator_type& allocator)
-        : storage_(allocator, nullptr)
+        : ebo_base{allocator}
     {
         do_construct(value);
     }
@@ -181,7 +170,7 @@ public:
      * supplied allocator.
      */
     allocated_value(value_type&& value, const allocator_type& allocator)
-        : storage_(allocator, nullptr)
+        : ebo_base{allocator}
     {
         do_construct(std::move(value));
     }
@@ -200,7 +189,6 @@ public:
                     std::is_constructible<T, Args...>::value &&
                     std::is_default_constructible<A>::value>::type>
     explicit allocated_value(in_place_t, Args&&... args)
-        : storage_(allocator_type{}, nullptr)
     {
         do_construct(std::forward<Args>(args)...);
     }
@@ -219,7 +207,7 @@ public:
                     std::is_constructible<T, Args...>::value>::type>
     allocated_value(std::allocator_arg_t, const allocator_type& allocator,
                     in_place_t, Args&&... args)
-        : storage_(allocator)
+        : ebo_base{allocator}
     {
         do_construct(std::forward<Args>(args)...);
     }
@@ -245,7 +233,7 @@ public:
      * the supplied allocator.
      */
     allocated_value(const allocated_value& other, const allocator_type& allocator)
-            : storage_(allocator, nullptr)
+            : ebo_base{allocator}
     {
         do_construct(other.get());
     }
@@ -262,9 +250,10 @@ public:
      * This constructor will not throw.
      */
     allocated_value(allocated_value&& other) noexcept
-        : storage_(std::move(other.storage_))
+        : ebo_base(std::move(other)),
+          ptr(std::move(other.ptr))
     {
-        other.ptr() = nullptr;
+        other.ptr = nullptr;
     }
 
     /**
@@ -288,13 +277,13 @@ public:
      */
     allocated_value(allocated_value&& other, const allocator_type& allocator)
         noexcept(is_always_equal_v)
-        : storage_(allocator, nullptr)
+        : ebo_base{allocator}
     {
         // If the provided allocator equals other's allocator, we can just
         // steal its contents
         if (get_allocator() == other.get_allocator()) {
-            ptr() = std::move(other.ptr());
-            other.ptr() = nullptr;
+            ptr = std::move(other.ptr);
+            other.ptr = nullptr;
         } else {  // Otherwise we have to allocate and then move-construct the value
             do_construct(std::move(other.get()));
         }
@@ -385,8 +374,8 @@ public:
         auto temp = std::move(get());
         auto a = get_allocator();
         TRY {
-            traits::destroy(a, ptr());
-            traits::construct(a, ptr(), std::forward<Args>(args)...);
+            traits::destroy(a, ptr);
+            traits::construct(a, ptr, std::forward<Args>(args)...);
         } CATCH(...) {
             get() = std::move(temp);
         }
@@ -394,12 +383,12 @@ public:
     }
 
     /// Access the contained value.
-    reference get() noexcept { return *ptr(); }
+    reference get() noexcept { return *ptr; }
     /// @overload
-    const_reference get() const noexcept { return *ptr(); }
+    const_reference get() const noexcept { return *ptr; }
 
     /// Returns a copy of the contained allocator.
-    allocator_type get_allocator() const noexcept { return alloc(); }
+    allocator_type get_allocator() const noexcept { return as_allocator(); }
 
     /// Returns get().
     reference operator*() noexcept { return get(); }
@@ -407,20 +396,20 @@ public:
     const_reference operator*() const noexcept { return get(); }
 
     /// Member access.
-    pointer operator->() noexcept { return ptr(); }
+    pointer operator->() noexcept { return ptr; }
     /// @overload
-    const_pointer operator->() const noexcept { return ptr(); }
+    const_pointer operator->() const noexcept { return ptr; }
 
 private:
     template <typename... Args>
     void do_construct(Args&&... args)
     {
         auto a = get_allocator();
-        ptr() = traits::allocate(a, 1);
+        ptr = traits::allocate(a, 1);
         TRY {
-            traits::construct(a, ptr(), std::forward<Args>(args)...);
+            traits::construct(a, ptr, std::forward<Args>(args)...);
         } CATCH (...) {
-            traits::deallocate(a, ptr(), 1);
+            traits::deallocate(a, ptr, 1);
             THROW;
         }
     }
@@ -429,14 +418,26 @@ private:
     {
         // Keep a copy of our old contents around for safekeeping
         auto temp = std::move(*this);
-        alloc() = other.alloc();
+        ptr = nullptr;
+        // We are now empty, so copy-assign the allocator, allocate, then
+        // (try to) copy-assign the value.
+        as_allocator() = other.get_allocator();
         auto a = get_allocator();
         TRY {
-            ptr() = traits::allocate(a, 1);
-            get() = other.get();
+            ptr = traits::allocate(a, 1);
+            TRY {
+                get() = other.get();
+            } CATCH(...) {
+                traits::deallocate(a, ptr, 1);
+                ptr = nullptr;
+                THROW;
+            }
         } CATCH (...) {
-            // Explicitly call the POCMA move-assign to restore our old allocator too
-            do_move_assign(std::true_type{}, std::move(temp));
+            // Either allocate or copy-assign has failed, so restore our old
+            // allocator and value then re-throw
+            as_allocator() = std::move(temp.as_allocator());
+            ptr = std::move(temp.ptr);
+            temp.ptr = nullptr;
             THROW;
         }
     }
@@ -451,8 +452,9 @@ private:
     {
         // Destroy what we have, then steal the contents of other
         noexcept_release();
-        storage_ = std::move(other.storage_);
-        other.ptr() = nullptr;
+        this->as_allocator() = std::move(other.as_allocator());
+        this->ptr = other.ptr;
+        other.ptr = nullptr;
     }
 
     void do_move_assign(std::false_type /*is_pocma*/, allocated_value&& other)
@@ -461,8 +463,8 @@ private:
         if (get_allocator() == other.get_allocator()) {
             // Destroy what we have, then steal the allocated pointer from other
             noexcept_release();
-            ptr() = std::move(other.ptr());
-            other.ptr() = nullptr;
+            ptr = std::move(other.ptr);
+            other.ptr = nullptr;
         } else {
             // Move-assign our value from other
             get() = std::move(other.get());
@@ -471,16 +473,17 @@ private:
 
     void do_swap(std::true_type /*is_pocs*/, allocated_value& other) noexcept
     {
-        // Need to swap both allocator and value, can just swap the underlying
-        // storage tuples
-        storage_.swap(other.storage_);
+        // Need to swap both allocator and pointer
+        using std::swap;
+        swap(as_allocator(), other.as_allocator());
+        swap(ptr, other.ptr);
     }
 
     void do_swap(std::false_type /*is_pocs*/, allocated_value& other) noexcept
     {
         // Only need to swap pointer values
         using std::swap;
-        swap(ptr(), other.ptr());
+        swap(ptr, other.ptr);
     }
 
     void noexcept_release() noexcept
@@ -488,23 +491,20 @@ private:
         // This is horrible. We call destroy then deallocate,
         // swallowing all exceptions that may occur
         auto a = get_allocator();
-        if (ptr()) {
+        if (ptr) {
             TRY {
-                traits::destroy(a, ptr());
+                traits::destroy(a, ptr);
             } CATCH (...) {}
             TRY {
-                traits::deallocate(a, ptr(), 1);
+                traits::deallocate(a, ptr, 1);
             } CATCH (...) {}
         }
     }
 
-    allocator_type& alloc() { return std::get<0>(storage_); }
-    const allocator_type& alloc() const { return std::get<0>(storage_); }
-    pointer& ptr() {  return std::get<1>(storage_); }
-    const pointer& ptr() const { return std::get<1>(storage_); }
+    allocator_type& as_allocator() { return this->get_ebo_value(); }
+    const allocator_type& as_allocator() const { return this->get_ebo_value(); }
 
-    using storage_t = std::tuple<allocator_type, pointer>;
-    storage_t storage_;
+    pointer ptr = nullptr;
 };
 
 template <typename T, typename Alloc = std::allocator<T>, typename... Args>
