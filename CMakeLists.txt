@@ -8,6 +8,9 @@ set(CMAKE_CXX_EXTENSIONS Off)
 add_library(allocated_value INTERFACE)
 target_include_directories(allocated_value INTERFACE
                            ${allocated_value_SOURCE_DIR}/include)
+target_sources(allocated_value INTERFACE
+               ${allocated_value_SOURCE_DIR}/include/tcb/allocated_value.hpp
+               ${allocated_value_SOURCE_DIR}/include/tcb/pmr/allocated_value.hpp)
 
 enable_testing()
 
