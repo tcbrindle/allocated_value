@@ -182,15 +182,6 @@ TEST_CASE("Basic member access", "[basic]")
     REQUIRE(a->i == 4);
 }
 
-TEST_CASE("Basic nonmember swap", "[basic]")
-{
-    auto i = allocated_value<int>(3);
-    auto j = allocated_value<int>(4);
-    swap(i, j);
-    REQUIRE(*i == 4);
-    REQUIRE(*j == 3);
-}
-
 TEST_CASE("Basic make_allocated_value()", "[basic]")
 {
     const auto a = tcb::make_allocated_value<test_struct>("1", 2);
