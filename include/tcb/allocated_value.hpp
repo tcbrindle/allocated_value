@@ -65,10 +65,12 @@ class allocated_value : private detail::ebo_store<Alloc> {
     using is_pocma_t = typename traits::propagate_on_container_move_assignment;
     using is_pocs_t = typename traits::propagate_on_container_swap;
 
+    template <typename...> using void_t = void;
+
     template <typename A, typename = void>
     struct always_equal_helper : std::false_type {};
     template <typename A>
-    struct always_equal_helper<A, typename traits::is_always_equal>
+    struct always_equal_helper<A, void_t<typename std::allocator_traits<A>::is_always_equal>>
         : traits::is_always_equal
     {};
 
