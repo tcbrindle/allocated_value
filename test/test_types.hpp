@@ -3,6 +3,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <tuple>
 
 struct test_error : std::runtime_error {
     using std::runtime_error::runtime_error;
@@ -72,17 +73,22 @@ struct throw_on_value_construct : test_struct {
 
 struct throw_on_copy_construct : test_struct {
     using test_struct::test_struct;
+
+    throw_on_copy_construct() = default;
+
     throw_on_copy_construct(const throw_on_copy_construct&)
     {
         throw test_error{"throw_on_copy_construct"};
     }
     throw_on_copy_construct& operator=(const throw_on_copy_construct&) = default;
-    throw_on_copy_construct(throw_on_copy_construct&&) noexcept = default;
-    throw_on_copy_construct& operator=(throw_on_copy_construct&&) noexcept = default;
+    throw_on_copy_construct(throw_on_copy_construct&&) = default;
+    throw_on_copy_construct& operator=(throw_on_copy_construct&&) = default;
 };
 
 struct throw_on_move_construct : test_struct {
     using test_struct::test_struct;
+
+    throw_on_move_construct() = default;
 
     throw_on_move_construct(const throw_on_move_construct&) = default;
     throw_on_move_construct& operator=(const throw_on_move_construct&) = default;
@@ -91,7 +97,7 @@ struct throw_on_move_construct : test_struct {
     {
         throw test_error{"throw_on_move_construct"};
     }
-    throw_on_move_construct& operator=(throw_on_move_construct&&) noexcept = default;
+    throw_on_move_construct& operator=(throw_on_move_construct&&) = default;
 };
 
 struct throw_on_copy_assign : test_struct {
@@ -102,8 +108,8 @@ struct throw_on_copy_assign : test_struct {
     {
         throw test_error{"throw_on_copy_assign"};
     }
-    throw_on_copy_assign(throw_on_copy_assign&&) noexcept = default;
-    throw_on_copy_assign& operator=(throw_on_copy_assign&&) noexcept = default;
+    throw_on_copy_assign(throw_on_copy_assign&&) = default;
+    throw_on_copy_assign& operator=(throw_on_copy_assign&&) = default;
 };
 
 struct throw_on_move_assign : test_struct {
