@@ -99,7 +99,6 @@ public:
      */
     template <typename V = value_type, typename A = allocator_type,
               typename = typename std::enable_if<
-                      std::is_default_constructible<V>::value &&
                       std::is_default_constructible<A>::value>::type>
     explicit allocated_value()
     {
