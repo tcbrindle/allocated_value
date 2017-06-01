@@ -8,7 +8,7 @@
 namespace tcb {
 
 #ifndef TCB_ALLOCATED_VALUE_NO_EXCEPTIONS
-# ifndef __cpp_exceptions
+# if !(defined(__cpp_exceptions) || defined(_CPPUNWIND))
 #   define TCB_ALLOCATED_VALUE_NO_EXCEPTIONS
 # endif
 #endif
