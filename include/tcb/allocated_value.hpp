@@ -314,8 +314,8 @@ public:
      * If an exception is thrown during assignment, *this is unchanged.
      */
     allocated_value& operator=(const value_type& value)
-        noexcept(std::is_nothrow_copy_assignable<value_type>::value &&
-                 std::is_nothrow_move_constructible<value_type>::value)
+    //    noexcept(std::is_nothrow_copy_assignable<value_type>::value &&
+    //             std::is_nothrow_move_constructible<value_type>::value)
     {
         value_type temp{std::move(get())};
         TRY {
